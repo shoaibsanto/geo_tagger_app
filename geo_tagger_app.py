@@ -1,10 +1,9 @@
 import streamlit as st
 import piexif
 from PIL import Image
-import os
-import shutil
 from io import BytesIO
 import zipfile
+import os
 
 # ---------- Helper Functions ----------
 
@@ -27,7 +26,11 @@ def set_gps_location(exif_dict, lat, lng, alt):
     exif_dict['GPS'][piexif.GPSIFD.GPSAltitudeRef] = b'\x00'
 
 def convert_to_jpeg(img_file):
-    img = Image.open(img_file).convert("RGB")
+    try:
+        img = Image.open(img_file).convert("RGB")
+    except Exception as e:
+        st.error(f"Failed to open image: {e}")
+        return None
     new_img_io = BytesIO()
     img.save(new_img_io, format='JPEG')
     new_img_io.seek(0)
@@ -47,12 +50,16 @@ def geo_tag_image(image_bytes, lat, lng, alt):
     return output
 
 # ---------- Streamlit UI ----------
+
 st.set_page_config(page_title="📍 Geo-Tag Images", layout="centered")
 st.title("📸 Geo-Tag Your Images")
-
 st.markdown("Upload images and tag them with your GPS coordinates!")
 
-uploaded_files = st.file_uploader("Upload images", accept_multiple_files=True, type=["jpg", "jpeg", "png", "heic", "webp"])
+uploaded_files = st.file_uploader(
+    "Upload images", 
+    accept_multiple_files=True, 
+    type=["jpg", "jpeg", "png", "webp"]
+)
 
 latitude = st.number_input("Enter Latitude (e.g., 23.8103)", format="%.6f")
 longitude = st.number_input("Enter Longitude (e.g., 90.4125)", format="%.6f")
@@ -64,11 +71,11 @@ if st.button("✅ Geo-Tag & Download ZIP") and uploaded_files:
         for file in uploaded_files:
             filename = os.path.splitext(file.name)[0] + ".jpg"
             jpeg_io = convert_to_jpeg(file)
+            if not jpeg_io:
+                continue
             tagged_io = geo_tag_image(jpeg_io, latitude, longitude, altitude)
             zipf.writestr(filename, tagged_io.read())
             st.success(f"Tagged: {filename}")
     zip_buffer.seek(0)
     st.download_button("⬇️ Download Geo-Tagged ZIP", zip_buffer, file_name="geo_tagged_images.zip", mime="application/zip")
-
-    st.success("All images have been geo-tagged and zipped!")
     st.balloons()
